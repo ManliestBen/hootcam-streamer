@@ -2,7 +2,7 @@
 
 ## Run on boot (Pi)
 
-1. Complete the main [README](../README.md) setup (MediaMTX, ffmpeg, libcamera-apps, optional config.yaml).
+1. Complete the main [README](../README.md) setup (MediaMTX, ffmpeg, libcamera-apps, venv + `pip install -r requirements.txt`, optional config.yaml).
 
 2. Copy the unit file:
    ```bash
@@ -13,9 +13,9 @@
    ```bash
    sudo nano /etc/systemd/system/hootcam-streamer.service
    ```
-   Update `WorkingDirectory` to your repo path. If you use a virtualenv, set `ExecStart` to that Python, e.g.:
+   Update `WorkingDirectory` and the path in `ExecStart` (the default uses `.venv/bin/python`). If you did not create a venv, use system Python instead:
    ```ini
-   ExecStart=/home/pi/hootcam-streamer/.venv/bin/python -m hootcam_streamer
+   ExecStart=/usr/bin/python3 -m hootcam_streamer
    ```
 
 4. Optional: use a config file elsewhere (e.g. `/etc/hootcam-streamer/config.yaml`). Edit the unit and use:

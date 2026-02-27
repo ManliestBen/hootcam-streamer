@@ -8,8 +8,9 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/hootcam-streamer
-ExecStart=/usr/bin/python3 -m hootcam_streamer
-# For custom config: ExecStart=/usr/bin/python3 -m hootcam_streamer --config /etc/hootcam-streamer/config.yaml
+ExecStart=/home/pi/hootcam-streamer/.venv/bin/python -m hootcam_streamer
+# If not using a venv: ExecStart=/usr/bin/python3 -m hootcam_streamer
+# For custom config: add --config /etc/hootcam-streamer/config.yaml
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

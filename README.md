@@ -24,20 +24,29 @@ Part of the **3-part Hootcam** setup:
    wget -qO- https://github.com/bluenviron/mediamtx/releases/download/v1.11.0/mediamtx_v1.11.0_linux_arm64v8.tar.gz | tar xz -C /usr/local/bin
    ```
 
-2. Install deps (if not already):
+2. Install system deps (if not already):
 
    ```bash
    sudo apt install -y ffmpeg libcamera-apps
    ```
 
-3. Copy and edit config (optional):
+3. **Create a virtualenv and install Python deps** (recommended; keeps deps isolated):
+
+   ```bash
+   cd hootcam-streamer
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+4. Copy and edit config (optional):
 
    ```bash
    cp config.example.yaml config.yaml
    # edit config.yaml for resolution, fps, bitrate
    ```
 
-4. Run:
+5. Run (with venv activated):
 
    ```bash
    python -m hootcam_streamer
@@ -86,7 +95,7 @@ Send SIGINT (Ctrl+C) or SIGTERM; the process will stop MediaMTX and the ffmpeg/l
 To run Hootcam Streamer automatically on the Pi after reboot:
 
 1. Copy the systemd unit: `sudo cp contrib/hootcam-streamer.service /etc/systemd/system/`
-2. If your install path is not `/home/pi/hootcam-streamer`, edit the unit and set `WorkingDirectory` and (if you use a venv) `ExecStart` to your venv’s Python.
+2. If your install path is not `/home/pi/hootcam-streamer`, edit the unit and set `WorkingDirectory` and the path in `ExecStart` (default uses `.venv/bin/python`; if you skipped the venv, use `/usr/bin/python3`).
 3. Run: `sudo systemctl daemon-reload`, `sudo systemctl enable hootcam-streamer`, `sudo systemctl start hootcam-streamer`, `sudo systemctl status hootcam-streamer`.
 
 See **contrib/README.md** for full steps and options (e.g. custom config path).
