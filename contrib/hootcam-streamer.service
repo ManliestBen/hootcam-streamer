@@ -1,0 +1,18 @@
+[Unit]
+Description=Hootcam Streamer - RTSP streams from Pi CSI cameras
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/hootcam-streamer
+ExecStart=/usr/bin/python3 -m hootcam_streamer
+# For custom config: ExecStart=/usr/bin/python3 -m hootcam_streamer --config /etc/hootcam-streamer/config.yaml
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

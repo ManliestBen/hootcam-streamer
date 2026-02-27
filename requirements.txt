@@ -1,0 +1,2 @@
+# Optional: only needed if you use config.yaml (YAML support)
+PyYAML>=6.0

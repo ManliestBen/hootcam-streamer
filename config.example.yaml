@@ -1,0 +1,19 @@
+# Hootcam Streamer – RTSP streams from Pi CSI cameras
+# Copy to config.yaml and adjust as needed.
+
+mediamtx_path: mediamtx
+rtsp_port: 8554
+
+cam0:
+  enabled: true
+  width: 1920
+  height: 1080
+  fps: 25
+  bitrate: 4000000
+
+cam1:
+  enabled: true
+  width: 1920
+  height: 1080
+  fps: 25
+  bitrate: 4000000
