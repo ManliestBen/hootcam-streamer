@@ -3,8 +3,12 @@
 
 mediamtx_path: mediamtx
 rtsp_port: 8554
-# Backend: "rpicam-vid" (default) or "picamera2". Use "picamera2" for dual-camera on Pi 5.
+# Backend: "rpicam-vid" (default), "picamera2", or "spyglass".
+# spyglass = two Spyglass MJPEG servers (one per camera). No MediaMTX/ffmpeg needed.
 # backend: rpicam-vid
+# backend: spyglass
+# spyglass_port_cam0: 8080
+# spyglass_port_cam1: 8081
 # If port 8000 (MediaMTX RTP) or 8001 (RTCP) is already in use, set an alternate RTP port.
 # MediaMTX will use mediamtx_rtp_port and mediamtx_rtp_port+1 for RTCP.
 # mediamtx_rtp_port: 8010

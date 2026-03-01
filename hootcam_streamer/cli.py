@@ -84,22 +84,23 @@ def main() -> None:
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
 
-    if backend not in ("rpicam-vid", "picamera2"):
-        logger.error("Invalid backend %r; use 'rpicam-vid' or 'picamera2'", backend)
+    if backend not in ("rpicam-vid", "picamera2", "spyglass"):
+        logger.error("Invalid backend %r; use 'rpicam-vid', 'picamera2', or 'spyglass'", backend)
         sys.exit(1)
     logger.info("Backend: %s", backend)
 
-    if kill_leftovers:
+    if kill_leftovers and backend != "spyglass":
         logger.info("Cleaning up any leftover camera/MediaMTX processes from previous run...")
         _kill_leftover_processes()
 
-    # MediaMTX required for both backends
-    if not shutil.which(mediamtx_path):
-        logger.error("MediaMTX binary not found: %s. Install from https://github.com/bluenviron/mediamtx/releases", mediamtx_path)
-        sys.exit(1)
-    if not shutil.which("ffmpeg"):
-        logger.error("ffmpeg not found. Install with: sudo apt install -y ffmpeg")
-        sys.exit(1)
+    if backend != "spyglass":
+        # MediaMTX + ffmpeg required for RTSP backends
+        if not shutil.which(mediamtx_path):
+            logger.error("MediaMTX binary not found: %s. Install from https://github.com/bluenviron/mediamtx/releases", mediamtx_path)
+            sys.exit(1)
+        if not shutil.which("ffmpeg"):
+            logger.error("ffmpeg not found. Install with: sudo apt install -y ffmpeg")
+            sys.exit(1)
     if backend == "rpicam-vid":
         camera_vid = _camera_vid_binary()
         if not camera_vid:
@@ -113,45 +114,71 @@ def main() -> None:
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
 
-    # 1) Start MediaMTX (no config file = default allow all)
-    mtx_cmd = [mediamtx_path]
-    if str(rtsp_port) != "8554":
-        mtx_cmd.extend(["--rtspPort", str(rtsp_port)])
-    mtx_env = os.environ.copy()
-    if mediamtx_rtp_port is not None:
-        rtp_port = int(mediamtx_rtp_port)
-        mtx_env["MTX_RTPADDRESS"] = f":{rtp_port}"
-        mtx_env["MTX_RTCPADDRESS"] = f":{rtp_port + 1}"
-        logger.info("MediaMTX RTP/RTCP ports: %s / %s", rtp_port, rtp_port + 1)
-    logger.info("Starting MediaMTX: %s", " ".join(mtx_cmd))
-    mtx = subprocess.Popen(
-        mtx_cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        env=mtx_env,
-    )
-    _processes.append(("MediaMTX", mtx))
-
-    # Give MediaMTX a moment to bind
-    time.sleep(1)
-    if mtx.poll() is not None:
-        _, err = mtx.communicate()
-        msg = err.decode(errors="replace").strip() if err else ""
-        parts = [f"exit code {mtx.returncode}"]
-        if msg:
-            parts.append(msg)
-        logger.error("MediaMTX exited: %s", " — ".join(parts) or "unknown")
-        logger.error("Run '%s' in a terminal to see MediaMTX output and fix the issue.", " ".join(mtx_cmd))
-        sys.exit(1)
-
-    rtsp_base = f"rtsp://127.0.0.1:{rtsp_port}"
-    logger.info("Streams: %s/cam0 and %s/cam1 (replace 127.0.0.1 with Pi IP for remote access)", rtsp_base, rtsp_base)
+    if backend != "spyglass":
+        # Start MediaMTX for RTSP backends
+        mtx_cmd = [mediamtx_path]
+        if str(rtsp_port) != "8554":
+            mtx_cmd.extend(["--rtspPort", str(rtsp_port)])
+        mtx_env = os.environ.copy()
+        if mediamtx_rtp_port is not None:
+            rtp_port = int(mediamtx_rtp_port)
+            mtx_env["MTX_RTPADDRESS"] = f":{rtp_port}"
+            mtx_env["MTX_RTCPADDRESS"] = f":{rtp_port + 1}"
+            logger.info("MediaMTX RTP/RTCP ports: %s / %s", rtp_port, rtp_port + 1)
+        logger.info("Starting MediaMTX: %s", " ".join(mtx_cmd))
+        mtx = subprocess.Popen(
+            mtx_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=mtx_env,
+        )
+        _processes.append(("MediaMTX", mtx))
+        time.sleep(1)
+        if mtx.poll() is not None:
+            _, err = mtx.communicate()
+            msg = err.decode(errors="replace").strip() if err else ""
+            parts = [f"exit code {mtx.returncode}"]
+            if msg:
+                parts.append(msg)
+            logger.error("MediaMTX exited: %s", " — ".join(parts) or "unknown")
+            logger.error("Run '%s' in a terminal to see MediaMTX output and fix the issue.", " ".join(mtx_cmd))
+            sys.exit(1)
+        rtsp_base = f"rtsp://127.0.0.1:{rtsp_port}"
+        logger.info("Streams: %s/cam0 and %s/cam1 (replace 127.0.0.1 with Pi IP for remote access)", rtsp_base, rtsp_base)
 
     try:
-        if backend == "picamera2":
+        if backend == "spyglass":
+            from .pipeline_spyglass import run_spyglass_pipeline
+            spyglass_port_cam0 = int(config.get("spyglass_port_cam0", 8080))
+            spyglass_port_cam1 = int(config.get("spyglass_port_cam1", 8081))
+            try:
+                procs = run_spyglass_pipeline(cam0, cam1, spyglass_port_cam0, spyglass_port_cam1)
+            except RuntimeError as e:
+                logger.error("%s", e)
+                sys.exit(1)
+            _processes.extend(procs)
+            if not _processes:
+                logger.warning("No Spyglass instances started (all cameras disabled)")
+            while _processes:
+                for label, p in _processes:
+                    if p.poll() is not None:
+                        err_msg = ""
+                        if p.stderr is not None:
+                            try:
+                                err_msg = p.stderr.read().decode(errors="replace").strip()
+                            except Exception:
+                                pass
+                        logger.warning("Process %s exited with %s", label, p.returncode)
+                        if err_msg:
+                            for line in err_msg.splitlines():
+                                logger.warning("  %s", line)
+                        raise SystemExit(1)
+                time.sleep(2)
+        elif backend == "picamera2":
             from .pipeline_picamera2 import run_picamera2_pipeline
             run_picamera2_pipeline(rtsp_base, cam0, cam1)
         else:
+            # rpicam-vid
             def start_camera_pipeline(cam_key: str, camera_index: int, cam_cfg: dict) -> None:
                 if not cam_cfg.get("enabled", True):
                     logger.info("Skipping %s (disabled)", cam_key)

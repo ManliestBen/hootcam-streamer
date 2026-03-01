@@ -12,9 +12,12 @@ Part of the **3-part Hootcam** setup:
 
 - Raspberry Pi OS (Bullseye or later) with libcamera
 - Two CSI cameras (or one; second stream will not start)
-- **MediaMTX** (RTSP server): [releases](https://github.com/bluenviron/mediamtx/releases)
-- **FFmpeg** (with libcamera or H.264 input)
-- **Camera capture**: Either **rpicam-vid** (default) or **Picamera2** (for dual-camera on Pi 5). For the default backend: `sudo apt install -y libcamera-apps` or `rpicam-apps` on Bookworm+. For Picamera2: the pip package needs the **libcamera** system library and Python bindings—install them via apt (step 2), then use a venv that can see them (step 3).
+
+**By backend:**
+
+- **rpicam-vid** (default): MediaMTX, FFmpeg, and `rpicam-vid`/`libcamera-vid` (`sudo apt install -y libcamera-apps` or `rpicam-apps`).
+- **picamera2**: MediaMTX, FFmpeg, and Picamera2 (system `python3-picamera2` + pip `picamera2`; see step 2–3).
+- **spyglass**: [Spyglass](https://github.com/ManliestBen/spyglass) only (`pip install git+https://github.com/ManliestBen/spyglass.git`). No MediaMTX or FFmpeg. Streams are MJPEG over HTTP.
 
 ## Quick start
 
@@ -72,11 +75,38 @@ Streams will be at:
 - `rtsp://<pi-ip>:8554/cam0`
 - `rtsp://<pi-ip>:8554/cam1`
 
+### Testing the streams
+
+With the streamer running, test from the Pi or from another machine on the same network (use the Pi's IP instead of `127.0.0.1`):
+
+- **ffplay** (from ffmpeg):  
+  `ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/cam0`
+- **VLC**: Media → Open Network Stream → enter `rtsp://127.0.0.1:8554/cam0` (or the Pi's IP).
+- **Probe with ffprobe**:  
+  `ffprobe -v error -rtsp_transport tcp -i rtsp://127.0.0.1:8554/cam0`
+
+Use `cam1` in the URL to test the second camera. If playback is choppy, try adding `-rtsp_transport tcp` (as in the ffplay example).
+
 Configure [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) (on the NUC) with these URLs as each camera’s `stream_url` (e.g. `rtsp://192.168.1.10:8554/cam0` for camera 0, using the Pi’s IP).
 
 ### Dual-camera on Raspberry Pi 5
 
 On Pi 5, the default backend can only use one camera (the second fails with "Pipeline handler in use"). To use **both** cameras: (1) install system deps including `python3-picamera2` (step 2), (2) create the venv with `--system-site-packages` and run `pip install -r requirements.txt` (step 3), (3) set `backend: picamera2` in `config.yaml`, then run `python -m hootcam_streamer`. See [docs/DUAL_CAMERA_DESIGN.md](docs/DUAL_CAMERA_DESIGN.md).
+
+### Spyglass backend (two MJPEG streams)
+
+With **`backend: spyglass`** the app runs two instances of [Spyglass](https://github.com/ManliestBen/spyglass) (one per camera). You get **MJPEG** over HTTP, not RTSP:
+
+- **cam0:** `http://<pi-ip>:8080/stream` (and `/snapshot`)
+- **cam1:** `http://<pi-ip>:8081/stream` (and `/snapshot`)
+
+No MediaMTX or ffmpeg required. Install Spyglass in the same venv:
+
+```bash
+pip install git+https://github.com/ManliestBen/spyglass.git
+```
+
+Then set `backend: spyglass` in `config.yaml` and run `python -m hootcam_streamer`. Resolution and FPS come from `cam0`/`cam1` in config. Spyglass uses Pi 5–friendly options (`--use_sw_jpg_encoding`, `--disable_webrtc`) by default.
 
 ## Config (config.yaml)
 
@@ -86,7 +116,8 @@ On Pi 5, the default backend can only use one camera (the second fails with "Pip
 | `rtsp_port` | `8554` | Port MediaMTX listens on (RTSP). |
 | `mediamtx_rtp_port` | *(none)* | If port 8000 (RTP) or 8001 (RTCP) is in use, set an alternate RTP port (e.g. `8010`); RTCP will use this + 1. |
 | `kill_leftover_processes` | `true` | On startup, send SIGTERM to any leftover `rpicam-vid`/`libcamera-vid`/`mediamtx` from a previous crash so cameras and ports are free. Set to `false` if you run multiple instances or other apps using the same binaries. |
-| `backend` | `rpicam-vid` | `rpicam-vid` (default) or `picamera2`. Use **`picamera2`** for **two cameras on Pi 5** (single process avoids "Pipeline handler in use"). Picamera2 is installed via `pip install -r requirements.txt`. |
+| `backend` | `rpicam-vid` | `rpicam-vid` (default), `picamera2`, or **`spyglass`**. **spyglass** runs two [Spyglass](https://github.com/ManliestBen/spyglass) MJPEG servers (one per camera); no MediaMTX/ffmpeg. Install with `pip install git+https://github.com/ManliestBen/spyglass.git`. |
+| `spyglass_port_cam0` / `spyglass_port_cam1` | `8080` / `8081` | Ports for the two Spyglass instances when `backend: spyglass`. Streams at `http://<pi-ip>:8080/stream` and `http://<pi-ip>:8081/stream`. |
 | `cam0` / `cam1` | — | Per-camera options (see below). |
 
 Per-camera (`cam0`, `cam1`):
@@ -115,13 +146,12 @@ Per-camera (`cam0`, `cam1`):
 
 - **"Camera frontend has timed out" / "Dequeue timer ... has expired"** — On Pi 5 the libcamera frontend timeout (default 1 s) can fire under load. The app automatically applies a bundled config that raises it to 100 s when using the Picamera2 backend (`hootcam_streamer/libcamera_rpi_timeout.yaml`). If you still see timeouts, ensure that file is present or set `LIBCAMERA_RPI_CONFIG_FILE` to a config with `pipeline_handler.camera_timeout_value_ms: 100000`.
 
+- **"Spyglass not found" (backend: spyglass)** — Install Spyglass in the same virtualenv: `pip install git+https://github.com/ManliestBen/spyglass.git`. Spyglass also needs system libcamera/Picamera2: `sudo apt install -y python3-picamera2` (and use a venv with `--system-site-packages` if needed).
+
 ## How it works
 
-1. **MediaMTX** runs as the RTSP server (port 8554).
-2. For each camera, **rpicam-vid** or **libcamera-vid** captures from the CSI camera and outputs H.264 to stdout.
-3. **FFmpeg** reads that stream and publishes it to MediaMTX as `rtsp://127.0.0.1:8554/cam0` (or `cam1`).
-
-No Python camera bindings are required at runtime; only MediaMTX and the two pipelines are used. This keeps CPU and dependencies minimal on the Pi.
+- **rpicam-vid / picamera2 backends:** MediaMTX runs as the RTSP server (port 8554). Each camera is captured (rpicam-vid or Picamera2) and fed through FFmpeg to MediaMTX as `rtsp://127.0.0.1:8554/cam0` and `cam1`.
+- **spyglass backend:** Two Spyglass processes run (one per camera), each serving MJPEG at `http://<pi>:8080/stream` and `http://<pi>:8081/stream`. No MediaMTX or FFmpeg.
 
 ## Stopping
 
