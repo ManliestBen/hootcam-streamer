@@ -113,6 +113,8 @@ Per-camera (`cam0`, `cam1`):
 
 - **Picamera2: "Failed to queue buffer" / "Input/output error" on second camera (cam1)** — On some Pi 5 setups the second camera hits V4L2 buffer errors even with a staggered start. The app waits 4 seconds between starting cam0 and cam1 to reduce this. If it still happens, try: reboot and run again; use a single camera (`cam1.enabled: false`); or check cables and that both cameras are detected (`libcamera-hello --list-cameras`).
 
+- **"Camera frontend has timed out" / "Dequeue timer ... has expired"** — On Pi 5 the libcamera frontend timeout (default 1 s) can fire under load. The app automatically applies a bundled config that raises it to 100 s when using the Picamera2 backend (`hootcam_streamer/libcamera_rpi_timeout.yaml`). If you still see timeouts, ensure that file is present or set `LIBCAMERA_RPI_CONFIG_FILE` to a config with `pipeline_handler.camera_timeout_value_ms: 100000`.
+
 ## How it works
 
 1. **MediaMTX** runs as the RTSP server (port 8554).

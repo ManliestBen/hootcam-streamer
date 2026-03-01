@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,12 @@ def run_picamera2_pipeline(
 
     Requires: pip install picamera2
     """
+    # Pi 5: increase libcamera frontend timeout to avoid "Camera frontend has timed out" under load
+    _libcamera_config = Path(__file__).resolve().parent / "libcamera_rpi_timeout.yaml"
+    if _libcamera_config.is_file():
+        os.environ.setdefault("LIBCAMERA_RPI_CONFIG_FILE", str(_libcamera_config))
+        logger.debug("Using libcamera config: %s", _libcamera_config)
+
     try:
         from picamera2 import Picamera2
         from picamera2.encoders import H264Encoder
