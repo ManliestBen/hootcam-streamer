@@ -1,8 +1,8 @@
 # Hootcam Streamer – two Spyglass MJPEG streams from Pi CSI cameras
 # Copy to config.yaml and adjust as needed.
 
-spyglass_port_cam0: 8080
-spyglass_port_cam1: 8081
+spyglass_port_cam0: 8082
+spyglass_port_cam1: 8083
 # Seconds to wait after starting cam0 before starting cam1 (reduces contention on Pi 5). Increase if cam1 fails.
 # spyglass_cam1_stagger_sec: 5.0
 
@@ -13,9 +13,11 @@ cam0:
   fps: 25
   bitrate: 4000000
 
+# If the second stream freezes after a few seconds, use lower res/fps for cam1 to reduce load (e.g. 1280x720 @ 15 fps).
 cam1:
   enabled: true
   width: 1920
   height: 1080
   fps: 25
   bitrate: 4000000
+  # Lighter option for stability when both streams run: width: 1280, height: 720, fps: 15

@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 _DEFAULTS = {
-    "spyglass_port_cam0": 8080,
-    "spyglass_port_cam1": 8081,
+    "spyglass_port_cam0": 8082,
+    "spyglass_port_cam1": 8083,
     "spyglass_cam1_stagger_sec": 5.0,
     "cam0": {"enabled": True, "width": 1920, "height": 1080, "fps": 25, "bitrate": 4000000},
     "cam1": {"enabled": True, "width": 1920, "height": 1080, "fps": 25, "bitrate": 4000000},

@@ -42,8 +42,8 @@ def main() -> None:
     config = load_config(args.config)
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
-    spyglass_port_cam0 = int(config.get("spyglass_port_cam0", 8080))
-    spyglass_port_cam1 = int(config.get("spyglass_port_cam1", 8081))
+    spyglass_port_cam0 = int(config.get("spyglass_port_cam0", 8082))
+    spyglass_port_cam1 = int(config.get("spyglass_port_cam1", 8083))
     cam1_stagger_sec = float(config.get("spyglass_cam1_stagger_sec", 5.0))
 
     signal.signal(signal.SIGINT, _sig_handler)

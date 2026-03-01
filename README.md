@@ -4,7 +4,7 @@ Runs on the **Raspberry Pi** and publishes **two MJPEG streams** (one per CSI ca
 
 Part of the **3-part Hootcam** setup:
 
-- **Pi (this app)** – Capture and stream only. Output: `http://<pi-ip>:8080/stream` and `http://<pi-ip>:8081/stream` (MJPEG).
+- **Pi (this app)** – Capture and stream only. Output: `http://<pi-ip>:8082/stream` and `http://<pi-ip>:8083/stream` (MJPEG).
 - **NUC – [Hootcam Motion](https://github.com/ManliestBen/hootcam-motion)** – Pulls those streams, runs motion detection and recording, serves the API and MJPEG for the UI.
 - **UI – [Hootcam UI](https://github.com/ManliestBen/hootcam-ui)** – Web interface; talks to the NUC only.
 
@@ -49,17 +49,17 @@ Part of the **3-part Hootcam** setup:
 
 Streams:
 
-- **cam0:** `http://<pi-ip>:8080/stream` (and `/snapshot`)
-- **cam1:** `http://<pi-ip>:8081/stream` (and `/snapshot`)
+- **cam0:** `http://<pi-ip>:8082/stream` (and `/snapshot`)
+- **cam1:** `http://<pi-ip>:8083/stream` (and `/snapshot`)
 
 ### Testing the streams
 
 With the streamer running, open in a browser or use curl:
 
-- **cam0:** `http://<pi-ip>:8080/stream`
-- **cam1:** `http://<pi-ip>:8081/stream`
+- **cam0:** `http://<pi-ip>:8082/stream`
+- **cam1:** `http://<pi-ip>:8083/stream`
 
-Or from the Pi: `curl http://127.0.0.1:8080/snapshot -o snap.jpg`
+Or from the Pi: `curl http://127.0.0.1:8082/snapshot -o snap.jpg`
 
 ## Configuring Hootcam Motion and Hootcam UI
 
@@ -68,14 +68,14 @@ Or from the Pi: `curl http://127.0.0.1:8080/snapshot -o snap.jpg`
 Hootcam Motion reads each camera’s **stream_url** and supports both RTSP and **MJPEG over HTTP**. For this streamer (Spyglass), use the MJPEG URLs:
 
 1. In the UI: **Cameras → Camera 0 → Config** (or Camera 1), set **Stream URL** to:
-   - **Camera 0:** `http://<pi-ip>:8080/stream`
-   - **Camera 1:** `http://<pi-ip>:8081/stream`
+   - **Camera 0:** `http://<pi-ip>:8082/stream`
+   - **Camera 1:** `http://<pi-ip>:8083/stream`
 
    Replace `<pi-ip>` with your Pi’s IP (e.g. `192.168.1.10`).
 
 2. Or via API:  
-   `PATCH /cameras/0/config` with `{ "stream_url": "http://192.168.1.10:8080/stream" }`  
-   `PATCH /cameras/1/config` with `{ "stream_url": "http://192.168.1.10:8081/stream" }`
+   `PATCH /cameras/0/config` with `{ "stream_url": "http://192.168.1.10:8082/stream" }`  
+   `PATCH /cameras/1/config` with `{ "stream_url": "http://192.168.1.10:8083/stream" }`
 
 OpenCV (used by Hootcam Motion) can read these MJPEG HTTP URLs the same way it reads RTSP.
 
@@ -93,7 +93,7 @@ Use your NUC’s IP and the port Hootcam Motion runs on (default 8080). The UI t
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `spyglass_port_cam0` / `spyglass_port_cam1` | `8080` / `8081` | Ports for the two Spyglass instances. Streams at `http://<pi-ip>:8080/stream` and `http://<pi-ip>:8081/stream`. |
+| `spyglass_port_cam0` / `spyglass_port_cam1` | `8082` / `8083` | Ports for the two Spyglass instances. Streams at `http://<pi-ip>:8082/stream` and `http://<pi-ip>:8083/stream`. |
 | `spyglass_cam1_stagger_sec` | `5.0` | Seconds to wait after starting cam0 before starting cam1. Reduces V4L2/libcamera contention on Pi 5; increase (e.g. 7–8) if the second stream fails. |
 | `cam0` / `cam1` | — | Per-camera options (see below). |
 
@@ -111,7 +111,17 @@ Per-camera (`cam0`, `cam1`):
 
 - **"Spyglass not found"** – Install Spyglass in the same virtualenv: `pip install git+https://github.com/ManliestBen/spyglass.git`. Spyglass needs system Picamera2: `sudo apt install -y python3-picamera2`, and use a venv with `--system-site-packages` so the venv can see it.
 
-- **Only one camera / second stream (8081) fails** – On Pi 5 the two Spyglass processes can contend for the camera pipeline. The app waits **5 seconds** between starting cam0 and cam1 by default. If cam1 still fails, increase `spyglass_cam1_stagger_sec` in `config.yaml` (e.g. 7 or 8). Alternatively reboot and run again, or set `cam1.enabled: false` to use a single camera.
+- **Only one camera / second stream (port 8083) fails to start** – On Pi 5 the two Spyglass processes can contend for the camera pipeline. The app waits **5 seconds** between starting cam0 and cam1 by default. If cam1 still fails to start, increase `spyglass_cam1_stagger_sec` in `config.yaml` (e.g. 7 or 8). Alternatively reboot and run again, or set `cam1.enabled: false` to use a single camera.
+
+- **Second stream (port 8083) starts then freezes after a few seconds** – Both streams encoding at full res/fps can overload the Pi (especially with software encoding on Pi 5). **Fix:** lower the load for cam1 so both streams stay stable. In `config.yaml`, set `cam1` to a lower resolution and/or FPS, for example:
+  ```yaml
+  cam1:
+    enabled: true
+    width: 1280
+    height: 720
+    fps: 15
+  ```
+  Keep `cam0` at 1920x1080 @ 25 fps if you want the primary stream at full quality; run cam1 at 1280x720 @ 15 fps (or 12 fps) to reduce CPU and keep both streams responsive.
 
 ## How it works
 
@@ -133,6 +143,6 @@ See **contrib/README.md** for full steps and options (e.g. custom config path).
 
 ## See also
 
-- [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) – Consumes these MJPEG streams (or RTSP), runs motion detection, recording, and the API. Run on the NUC. Set each camera’s `stream_url` to `http://<pi-ip>:8080/stream` and `http://<pi-ip>:8081/stream`.
+- [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) – Consumes these MJPEG streams (or RTSP), runs motion detection, recording, and the API. Run on the NUC. Set each camera’s `stream_url` to `http://<pi-ip>:8082/stream` and `http://<pi-ip>:8083/stream`.
 - [**Hootcam UI**](https://github.com/ManliestBen/hootcam-ui) – Web frontend; point it at Hootcam Motion (not at the Pi).
 - [**Spyglass**](https://github.com/ManliestBen/spyglass) – MJPEG server for Picamera2 used by this app.

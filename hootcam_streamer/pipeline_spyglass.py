@@ -1,7 +1,7 @@
 """Run two Spyglass instances (one per camera) for MJPEG streaming.
 
 Spyglass: https://github.com/ManliestBen/spyglass
-Streams are MJPEG at http://<pi-ip>:8080/stream and http://<pi-ip>:8081/stream (default ports).
+Streams are MJPEG at http://<pi-ip>:8082/stream and http://<pi-ip>:8083/stream (default ports).
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ def _stop_handler(_signum: int, _frame: object) -> None:
 def run_spyglass_pipeline(
     cam0: dict[str, Any],
     cam1: dict[str, Any],
-    spyglass_port_cam0: int = 8080,
-    spyglass_port_cam1: int = 8081,
+    spyglass_port_cam0: int = 8082,
+    spyglass_port_cam1: int = 8083,
     cam1_stagger_sec: float = 5.0,
 ) -> list[tuple[str, subprocess.Popen]]:
     """Start two Spyglass processes (camera 0 and 1). Returns list of (label, process) for caller to track."""
