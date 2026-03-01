@@ -14,7 +14,7 @@ Part of the **3-part Hootcam** setup:
 - Two CSI cameras (or one; second stream will not start)
 - **MediaMTX** (RTSP server): [releases](https://github.com/bluenviron/mediamtx/releases)
 - **FFmpeg** (with libcamera or H.264 input)
-- **libcamera-vid** (from `libcamera-apps`: `sudo apt install -y libcamera-apps`)
+- **Camera capture**: `rpicam-vid` (newer Pi OS) or `libcamera-vid` (older). Install: `sudo apt install -y libcamera-apps` or `rpicam-apps` on Bookworm+.
 
 ## Quick start
 
@@ -36,6 +36,7 @@ Part of the **3-part Hootcam** setup:
 
    ```bash
    sudo apt install -y ffmpeg libcamera-apps
+   # On Raspberry Pi OS Bookworm and later you may need: sudo apt install -y rpicam-apps
    ```
 
 3. **Create a virtualenv and install Python deps** (recommended; keeps deps isolated):
@@ -94,14 +95,14 @@ Per-camera (`cam0`, `cam1`):
 ## How it works
 
 1. **MediaMTX** runs as the RTSP server (port 8554).
-2. For each camera, **libcamera-vid** captures from the CSI camera and outputs H.264 to stdout.
+2. For each camera, **rpicam-vid** or **libcamera-vid** captures from the CSI camera and outputs H.264 to stdout.
 3. **FFmpeg** reads that stream and publishes it to MediaMTX as `rtsp://127.0.0.1:8554/cam0` (or `cam1`).
 
 No Python camera bindings are required at runtime; only MediaMTX and the two pipelines are used. This keeps CPU and dependencies minimal on the Pi.
 
 ## Stopping
 
-Send SIGINT (Ctrl+C) or SIGTERM; the process will stop MediaMTX and the ffmpeg/libcamera-vid pipelines.
+Send SIGINT (Ctrl+C) or SIGTERM; the process will stop MediaMTX and the camera/ffmpeg pipelines.
 
 ## Running as a service (start on boot)
 

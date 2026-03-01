@@ -1,9 +1,10 @@
-"""Main entry: start MediaMTX and two libcamera-vid | ffmpeg pipelines."""
+"""Main entry: start MediaMTX and two camera-vid | ffmpeg pipelines."""
 from __future__ import annotations
 
 import argparse
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -15,6 +16,17 @@ from .config import load_config
 logger = logging.getLogger(__name__)
 
 _processes: list[subprocess.Popen] = []
+
+# Newer Pi OS uses rpicam-vid; older uses libcamera-vid. Same CLI for our options.
+CAMERA_VID_BINARIES = ("rpicam-vid", "libcamera-vid")
+
+
+def _camera_vid_binary() -> str | None:
+    """Return the camera capture binary to use (rpicam-vid or libcamera-vid), or None."""
+    for name in CAMERA_VID_BINARIES:
+        if shutil.which(name):
+            return name
+    return None
 
 
 def _sig_handler(_signum: int, _frame: object) -> None:
@@ -44,6 +56,22 @@ def main() -> None:
     mediamtx_rtp_port = config.get("mediamtx_rtp_port")
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
+
+    # Require system binaries (not in venv)
+    if not shutil.which(mediamtx_path):
+        logger.error("MediaMTX binary not found: %s. Install from https://github.com/bluenviron/mediamtx/releases", mediamtx_path)
+        sys.exit(1)
+    camera_vid = _camera_vid_binary()
+    if not camera_vid:
+        logger.error(
+            "No camera capture binary found (tried: %s). Install with: sudo apt install -y libcamera-apps (or rpicam-apps on newer Pi OS)",
+            ", ".join(CAMERA_VID_BINARIES),
+        )
+        sys.exit(1)
+    logger.info("Using camera binary: %s", camera_vid)
+    if not shutil.which("ffmpeg"):
+        logger.error("ffmpeg not found. Install with: sudo apt install -y ffmpeg")
+        sys.exit(1)
 
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
@@ -88,9 +116,9 @@ def main() -> None:
         w = cam_cfg.get("width", 1920)
         h = cam_cfg.get("height", 1080)
         fps = cam_cfg.get("fps", 25)
-        # libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout H.264
+        # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout H.264
         libcam_cmd = [
-            "libcamera-vid",
+            camera_vid,
             "-t", "0",
             "-n",
             "-c", str(camera_index),
@@ -111,8 +139,8 @@ def main() -> None:
             "-f", "rtsp",
             f"{rtsp_base}/{path_name}",
         ]
-        logger.info("Starting pipeline %s: libcamera-vid | ffmpeg -> %s/%s", cam_key, rtsp_base, path_name)
-        # Use a pipe: libcamera-vid stdout -> ffmpeg stdin
+        logger.info("Starting pipeline %s: %s | ffmpeg -> %s/%s", cam_key, camera_vid, rtsp_base, path_name)
+        # Use a pipe: camera stdout -> ffmpeg stdin
         libcam = subprocess.Popen(
             libcam_cmd,
             stdout=subprocess.PIPE,
