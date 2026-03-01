@@ -17,69 +17,6 @@ def _stop_handler(_signum: int, _frame: object) -> None:
     _keep_running = False
 
 
-class _RTSPOutput:
-    """Picamera2 Output that pipes H.264 to ffmpeg with -f h264 so MediaMTX accepts it.
-
-    FfmpegOutput's built-in ffmpeg can trigger MediaMTX 400 Bad Request (codec params).
-    Using our own ffmpeg with -f h264 -i pipe:0 -c:v copy -f rtsp matches the working
-    rpicam-vid pipeline and is accepted by MediaMTX.
-    """
-
-    def __init__(self, rtsp_url: str) -> None:
-        self.rtsp_url = rtsp_url
-        self.ffmpeg: subprocess.Popen[bytes] | None = None
-        self.recording = False
-        self.needs_pacing = True  # encoder may check this
-
-    def start(self) -> None:
-        self.ffmpeg = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-hide_banner", "-loglevel", "warning",
-                "-f", "h264",
-                "-i", "pipe:0",
-                "-c:v", "copy",
-                "-f", "rtsp",
-                self.rtsp_url,
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        self.recording = True
-
-    def stop(self) -> None:
-        self.recording = False
-        if self.ffmpeg is not None and self.ffmpeg.stdin is not None:
-            try:
-                self.ffmpeg.stdin.close()
-            except Exception:
-                pass
-            try:
-                self.ffmpeg.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.ffmpeg.kill()
-            self.ffmpeg = None
-
-    def outputframe(
-        self,
-        frame: bytes,
-        keyframe: bool = True,
-        timestamp: int | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        if not self.recording or self.ffmpeg is None or self.ffmpeg.stdin is None:
-            return
-        try:
-            self.ffmpeg.stdin.write(frame)
-            self.ffmpeg.stdin.flush()
-        except BrokenPipeError:
-            self.ffmpeg = None
-        except Exception:
-            pass
-
-
 def run_picamera2_pipeline(
     rtsp_base: str,
     cam0: dict[str, Any],
@@ -92,10 +29,72 @@ def run_picamera2_pipeline(
     try:
         from picamera2 import Picamera2
         from picamera2.encoders import H264Encoder
+        from picamera2.outputs import Output as Picamera2Output
     except ImportError as e:
         raise RuntimeError(
             "Picamera2 backend requires the picamera2 package. Install with: pip install picamera2"
         ) from e
+
+    class _RTSPOutput(Picamera2Output):
+        """Pipes H.264 to ffmpeg with -f h264 so MediaMTX accepts it (avoids 400 Bad Request)."""
+
+        def __init__(self, rtsp_url: str) -> None:
+            try:
+                super().__init__()
+            except TypeError:
+                super().__init__(pts=None)
+            self.rtsp_url = rtsp_url
+            self.ffmpeg: subprocess.Popen[bytes] | None = None
+            self.recording = False
+            self.needs_pacing = True
+
+        def start(self) -> None:
+            self.ffmpeg = subprocess.Popen(
+                [
+                    "ffmpeg",
+                    "-hide_banner", "-loglevel", "warning",
+                    "-f", "h264",
+                    "-i", "pipe:0",
+                    "-c:v", "copy",
+                    "-f", "rtsp",
+                    self.rtsp_url,
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            self.recording = True
+
+        def stop(self) -> None:
+            self.recording = False
+            if self.ffmpeg is not None and self.ffmpeg.stdin is not None:
+                try:
+                    self.ffmpeg.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    self.ffmpeg.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.ffmpeg.kill()
+                self.ffmpeg = None
+
+        def outputframe(
+            self,
+            frame: bytes,
+            keyframe: bool = True,
+            timestamp: int | None = None,
+            *args: Any,
+            **kwargs: Any,
+        ) -> None:
+            if not self.recording or self.ffmpeg is None or self.ffmpeg.stdin is None:
+                return
+            try:
+                self.ffmpeg.stdin.write(frame)
+                self.ffmpeg.stdin.flush()
+            except BrokenPipeError:
+                self.ffmpeg = None
+            except Exception:
+                pass
 
     global _keep_running
     _keep_running = True
