@@ -3,6 +3,8 @@
 
 mediamtx_path: mediamtx
 rtsp_port: 8554
+# Backend: "rpicam-vid" (default) or "picamera2". Use "picamera2" for dual-camera on Pi 5.
+# backend: rpicam-vid
 # If port 8000 (MediaMTX RTP) or 8001 (RTCP) is already in use, set an alternate RTP port.
 # MediaMTX will use mediamtx_rtp_port and mediamtx_rtp_port+1 for RTCP.
 # mediamtx_rtp_port: 8010
@@ -16,6 +18,7 @@ cam0:
   fps: 25
   bitrate: 4000000
 
+# On Pi 5, set enabled: false for cam1 if the second pipeline fails with "Pipeline handler in use".
 cam1:
   enabled: true
   width: 1920

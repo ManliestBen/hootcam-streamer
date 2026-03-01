@@ -80,28 +80,35 @@ def main() -> None:
     rtsp_port = config.get("rtsp_port", 8554)
     mediamtx_rtp_port = config.get("mediamtx_rtp_port")
     kill_leftovers = config.get("kill_leftover_processes", True)
+    backend = config.get("backend", "rpicam-vid").strip().lower()
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
+
+    if backend not in ("rpicam-vid", "picamera2"):
+        logger.error("Invalid backend %r; use 'rpicam-vid' or 'picamera2'", backend)
+        sys.exit(1)
+    logger.info("Backend: %s", backend)
 
     if kill_leftovers:
         logger.info("Cleaning up any leftover camera/MediaMTX processes from previous run...")
         _kill_leftover_processes()
 
-    # Require system binaries (not in venv)
+    # MediaMTX required for both backends
     if not shutil.which(mediamtx_path):
         logger.error("MediaMTX binary not found: %s. Install from https://github.com/bluenviron/mediamtx/releases", mediamtx_path)
         sys.exit(1)
-    camera_vid = _camera_vid_binary()
-    if not camera_vid:
-        logger.error(
-            "No camera capture binary found (tried: %s). Install with: sudo apt install -y libcamera-apps (or rpicam-apps on newer Pi OS)",
-            ", ".join(CAMERA_VID_BINARIES),
-        )
-        sys.exit(1)
-    logger.info("Using camera binary: %s", camera_vid)
     if not shutil.which("ffmpeg"):
         logger.error("ffmpeg not found. Install with: sudo apt install -y ffmpeg")
         sys.exit(1)
+    if backend == "rpicam-vid":
+        camera_vid = _camera_vid_binary()
+        if not camera_vid:
+            logger.error(
+                "No camera capture binary found (tried: %s). Install with: sudo apt install -y libcamera-apps (or rpicam-apps on newer Pi OS)",
+                ", ".join(CAMERA_VID_BINARIES),
+            )
+            sys.exit(1)
+        logger.info("Using camera binary: %s", camera_vid)
 
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
@@ -138,81 +145,80 @@ def main() -> None:
         sys.exit(1)
 
     rtsp_base = f"rtsp://127.0.0.1:{rtsp_port}"
-
-    def start_camera_pipeline(cam_key: str, camera_index: int, cam_cfg: dict) -> None:
-        if not cam_cfg.get("enabled", True):
-            logger.info("Skipping %s (disabled)", cam_key)
-            return
-        w = cam_cfg.get("width", 1920)
-        h = cam_cfg.get("height", 1080)
-        fps = cam_cfg.get("fps", 25)
-        # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout.
-        # --libav-format required when writing to stdout (Pi 5 / newer libav backend).
-        libcam_cmd = [
-            camera_vid,
-            "-t", "0",
-            "-n",
-            "-c", str(camera_index),
-            "--width", str(w),
-            "--height", str(h),
-            "--framerate", str(fps),
-            "--codec", "h264",
-            "--libav-format", "h264",
-            "-o", "-",
-        ]
-        # ffmpeg: read H.264 from stdin, copy to RTSP
-        path_name = "cam0" if camera_index == 0 else "cam1"
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-hide_banner", "-loglevel", "warning",
-            "-f", "h264",
-            "-i", "pipe:0",
-            "-c:v", "copy",
-            "-f", "rtsp",
-            f"{rtsp_base}/{path_name}",
-        ]
-        logger.info("Starting pipeline %s: %s | ffmpeg -> %s/%s", cam_key, camera_vid, rtsp_base, path_name)
-        # Use a pipe: camera stdout -> ffmpeg stdin
-        libcam = subprocess.Popen(
-            libcam_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        _processes.append((f"{cam_key}/{camera_vid}", libcam))
-        ffmpeg = subprocess.Popen(
-            ffmpeg_cmd,
-            stdin=libcam.stdout,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        libcam.stdout = None  # allow libcam to get SIGPIPE when ffmpeg exits
-        _processes.append((f"{cam_key}/ffmpeg", ffmpeg))
-
-    # Start pipelines staggered so they don't contend for the same libcamera pipeline (Pi 5 / pisp).
-    start_camera_pipeline("cam0", 0, cam0)
-    if cam1.get("enabled", True):
-        time.sleep(2)  # Let cam0 acquire camera before cam1 tries
-    start_camera_pipeline("cam1", 1, cam1)
-
     logger.info("Streams: %s/cam0 and %s/cam1 (replace 127.0.0.1 with Pi IP for remote access)", rtsp_base, rtsp_base)
 
-    # Wait for any process to exit (then we'll exit and cleanup)
     try:
-        while True:
-            for label, p in _processes:
-                if p.poll() is not None:
-                    err_msg = ""
-                    if p.stderr is not None:
-                        try:
-                            err_msg = p.stderr.read().decode(errors="replace").strip()
-                        except Exception:
-                            pass
-                    logger.warning("Process %s exited with %s", label, p.returncode)
-                    if err_msg:
-                        for line in err_msg.splitlines():
-                            logger.warning("  %s", line)
-                    raise SystemExit(1)
-            time.sleep(2)
+        if backend == "picamera2":
+            from .pipeline_picamera2 import run_picamera2_pipeline
+            run_picamera2_pipeline(rtsp_base, cam0, cam1)
+        else:
+            def start_camera_pipeline(cam_key: str, camera_index: int, cam_cfg: dict) -> None:
+                if not cam_cfg.get("enabled", True):
+                    logger.info("Skipping %s (disabled)", cam_key)
+                    return
+                w = cam_cfg.get("width", 1920)
+                h = cam_cfg.get("height", 1080)
+                fps = cam_cfg.get("fps", 25)
+                # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout.
+                # --libav-format required when writing to stdout (Pi 5 / newer libav backend).
+                libcam_cmd = [
+                    camera_vid,
+                    "-t", "0",
+                    "-n",
+                    "-c", str(camera_index),
+                    "--width", str(w),
+                    "--height", str(h),
+                    "--framerate", str(fps),
+                    "--codec", "h264",
+                    "--libav-format", "h264",
+                    "-o", "-",
+                ]
+                path_name = "cam0" if camera_index == 0 else "cam1"
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-hide_banner", "-loglevel", "warning",
+                    "-f", "h264",
+                    "-i", "pipe:0",
+                    "-c:v", "copy",
+                    "-f", "rtsp",
+                    f"{rtsp_base}/{path_name}",
+                ]
+                logger.info("Starting pipeline %s: %s | ffmpeg -> %s/%s", cam_key, camera_vid, rtsp_base, path_name)
+                libcam = subprocess.Popen(
+                    libcam_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                _processes.append((f"{cam_key}/{camera_vid}", libcam))
+                ffmpeg = subprocess.Popen(
+                    ffmpeg_cmd,
+                    stdin=libcam.stdout,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+                libcam.stdout = None
+                _processes.append((f"{cam_key}/ffmpeg", ffmpeg))
+
+            start_camera_pipeline("cam0", 0, cam0)
+            if cam1.get("enabled", True):
+                time.sleep(2)
+            start_camera_pipeline("cam1", 1, cam1)
+
+            while True:
+                for label, p in _processes:
+                    if p.poll() is not None:
+                        err_msg = ""
+                        if p.stderr is not None:
+                            try:
+                                err_msg = p.stderr.read().decode(errors="replace").strip()
+                            except Exception:
+                                pass
+                        logger.warning("Process %s exited with %s", label, p.returncode)
+                        if err_msg:
+                            for line in err_msg.splitlines():
+                                logger.warning("  %s", line)
+                        raise SystemExit(1)
+                time.sleep(2)
     except (SystemExit, KeyboardInterrupt):
         pass
     finally:

@@ -1,2 +1,5 @@
 # Optional: only needed if you use config.yaml (YAML support)
 PyYAML>=6.0
+
+# Required for backend: picamera2 (dual-camera on Pi 5). Omit if you only use backend: rpicam-vid.
+picamera2

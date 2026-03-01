@@ -7,6 +7,7 @@ from typing import Any
 _DEFAULTS = {
     "mediamtx_path": "mediamtx",
     "rtsp_port": 8554,
+    "backend": "rpicam-vid",  # "rpicam-vid" or "picamera2" (use picamera2 for dual-camera on Pi 5)
     "kill_leftover_processes": True,
     "cam0": {"enabled": True, "width": 1920, "height": 1080, "fps": 25, "bitrate": 4000000},
     "cam1": {"enabled": True, "width": 1920, "height": 1080, "fps": 25, "bitrate": 4000000},
@@ -25,7 +26,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     except Exception:
         return dict(_DEFAULTS)
     out = dict(_DEFAULTS)
-    for key in ("mediamtx_path", "rtsp_port", "mediamtx_rtp_port", "kill_leftover_processes"):
+    for key in ("mediamtx_path", "rtsp_port", "mediamtx_rtp_port", "kill_leftover_processes", "backend"):
         if key in data:
             out[key] = data[key]
     for cam in ("cam0", "cam1"):
