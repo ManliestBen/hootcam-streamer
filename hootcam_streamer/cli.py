@@ -15,7 +15,7 @@ from .config import load_config
 
 logger = logging.getLogger(__name__)
 
-_processes: list[subprocess.Popen] = []
+_processes: list[tuple[str, subprocess.Popen]] = []
 
 # Newer Pi OS uses rpicam-vid; older uses libcamera-vid. Same CLI for our options.
 CAMERA_VID_BINARIES = ("rpicam-vid", "libcamera-vid")
@@ -30,7 +30,7 @@ def _camera_vid_binary() -> str | None:
 
 
 def _sig_handler(_signum: int, _frame: object) -> None:
-    for p in _processes:
+    for _label, p in _processes:
         try:
             p.terminate()
         except Exception:
@@ -93,7 +93,7 @@ def main() -> None:
         stderr=subprocess.PIPE,
         env=mtx_env,
     )
-    _processes.append(mtx)
+    _processes.append(("MediaMTX", mtx))
 
     # Give MediaMTX a moment to bind
     time.sleep(1)
@@ -144,9 +144,9 @@ def main() -> None:
         libcam = subprocess.Popen(
             libcam_cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
-        _processes.append(libcam)
+        _processes.append((f"{cam_key}/{camera_vid}", libcam))
         ffmpeg = subprocess.Popen(
             ffmpeg_cmd,
             stdin=libcam.stdout,
@@ -154,7 +154,7 @@ def main() -> None:
             stderr=subprocess.PIPE,
         )
         libcam.stdout = None  # allow libcam to get SIGPIPE when ffmpeg exits
-        _processes.append(ffmpeg)
+        _processes.append((f"{cam_key}/ffmpeg", ffmpeg))
 
     start_camera_pipeline("cam0", 0, cam0)
     start_camera_pipeline("cam1", 1, cam1)
@@ -164,15 +164,24 @@ def main() -> None:
     # Wait for any process to exit (then we'll exit and cleanup)
     try:
         while True:
-            for p in _processes:
+            for label, p in _processes:
                 if p.poll() is not None:
-                    logger.warning("Process %s exited with %s", p, p.returncode)
+                    err_msg = ""
+                    if p.stderr is not None:
+                        try:
+                            err_msg = p.stderr.read().decode(errors="replace").strip()
+                        except Exception:
+                            pass
+                    logger.warning("Process %s exited with %s", label, p.returncode)
+                    if err_msg:
+                        for line in err_msg.splitlines():
+                            logger.warning("  %s", line)
                     raise SystemExit(1)
             time.sleep(2)
     except (SystemExit, KeyboardInterrupt):
         pass
     finally:
-        for p in _processes:
+        for _label, p in _processes:
             try:
                 p.terminate()
                 p.wait(timeout=5)
