@@ -116,7 +116,8 @@ def main() -> None:
         w = cam_cfg.get("width", 1920)
         h = cam_cfg.get("height", 1080)
         fps = cam_cfg.get("fps", 25)
-        # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout H.264
+        # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout.
+        # --libav-format required when writing to stdout (Pi 5 / newer libav backend).
         libcam_cmd = [
             camera_vid,
             "-t", "0",
@@ -126,6 +127,7 @@ def main() -> None:
             "--height", str(h),
             "--framerate", str(fps),
             "--codec", "h264",
+            "--libav-format", "h264",
             "-o", "-",
         ]
         # ffmpeg: read H.264 from stdin, copy to RTSP
