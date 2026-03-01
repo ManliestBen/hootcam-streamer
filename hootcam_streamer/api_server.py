@@ -56,7 +56,7 @@ def _run_server(
                     if key in patch and isinstance(patch[key], dict):
                         current.setdefault(key, {})
                         for k, v in patch[key].items():
-                            if k in ("width", "height", "fps", "enabled"):
+                            if k in ("width", "height", "fps", "enabled", "autofocus", "lens_position"):
                                 current[key][k] = v
                 config_module.save_config(config_path, current)
                 reload_requested[0] = True

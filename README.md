@@ -123,6 +123,8 @@ Per-camera (`cam0`, `cam1`):
 | `fps` | `25` | Framerate. |
 | `bitrate` | `4000000` | Ignored by Spyglass (MJPEG). Kept for config compatibility. |
 | `enabled` | `true` | Set `false` to disable a camera. |
+| `autofocus` | `continuous` | Focus mode: `continuous` (default) or `manual`. With `manual`, use `lens_position` to set a fixed focus. |
+| `lens_position` | — | Fixed focus distance (only when `autofocus: manual`). `0` = infinity, `0.5` ≈ 50 cm. Requires a camera that supports it (e.g. Raspberry Pi Camera Module 3). |
 
 ## Troubleshooting
 

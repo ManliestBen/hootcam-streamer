@@ -65,6 +65,16 @@ def run_spyglass_pipeline(
             "--use_sw_jpg_encoding",  # recommended on Pi 5
             "--disable_webrtc",      # recommended on Pi 5
         ]
+        # Fixed focus (lens position): only applies to cameras that support it (e.g. Camera Module 3).
+        autofocus = (cam_cfg.get("autofocus") or "continuous").strip().lower()
+        lens_position = cam_cfg.get("lens_position")
+        if autofocus == "manual" and lens_position is not None:
+            try:
+                lp = float(lens_position)
+                cmd.extend(["-af", "manual", "-l", str(lp)])
+                logger.info("%s: fixed focus (lens_position=%.2f)", cam_key, lp)
+            except (TypeError, ValueError):
+                pass
         logger.info(
             "Starting %s (Spyglass camera %s): %s @ %d fps on port %d",
             cam_key, camera_index, resolution, fps, port,

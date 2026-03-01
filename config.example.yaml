@@ -14,6 +14,9 @@ cam0:
   height: 1080
   fps: 25
   bitrate: 4000000
+  # Fixed focus (only on modules that support it, e.g. Camera Module 3). Use autofocus: manual and lens_position (0 = infinity, ~0.5 = 50 cm).
+  # autofocus: manual
+  # lens_position: 0.0
 
 # If the second stream freezes after a few seconds, use lower res/fps for cam1 to reduce load (e.g. 1280x720 @ 15 fps).
 cam1:
@@ -23,3 +26,6 @@ cam1:
   fps: 25
   bitrate: 4000000
   # Lighter option for stability when both streams run: width: 1280, height: 720, fps: 15
+  # Fixed focus per lens (same as cam0):
+  # autofocus: manual
+  # lens_position: 0.0
