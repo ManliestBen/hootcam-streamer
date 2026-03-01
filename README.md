@@ -93,7 +93,7 @@ Per-camera (`cam0`, `cam1`):
 
 - **Port 8000 (or 8001) already in use** — MediaMTX uses UDP 8000 (RTP) and 8001 (RTCP) by default. Set `mediamtx_rtp_port` in `config.yaml` to an unused port (e.g. `8010`). MediaMTX will then use that port and the next for RTP/RTCP.
 
-- **Pipeline/camera in use after a crash** — By default, on startup the app sends SIGTERM to any leftover `rpicam-vid`, `libcamera-vid`, and `mediamtx` processes from a previous run so you can restart without rebooting. To disable this (e.g. if you run multiple instances), set `kill_leftover_processes: false` in `config.yaml`.
+- **Pipeline/camera in use after a crash** — By default, on startup the app sends SIGTERM then SIGKILL to any leftover `rpicam-vid`, `libcamera-vid`, and `mediamtx` processes, then waits before starting so cameras are free. The two camera pipelines are also started with a short stagger so they don’t contend for the libcamera pipeline (Pi 5). To disable cleanup (e.g. if you run multiple instances), set `kill_leftover_processes: false` in `config.yaml`.
 
 ## How it works
 

@@ -31,7 +31,7 @@ def _camera_vid_binary() -> str | None:
 
 def _kill_leftover_processes() -> None:
     """Kill any leftover camera/MediaMTX processes from a previous crash so cameras and ports are free."""
-    # pkill sends SIGTERM; process names must match exactly (no path).
+    # pkill: SIGTERM first, then SIGKILL so the pipeline is released even if a process ignored TERM.
     for name in (*CAMERA_VID_BINARIES, "mediamtx"):
         try:
             subprocess.run(
@@ -41,7 +41,17 @@ def _kill_leftover_processes() -> None:
             )
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             pass
-    time.sleep(1.5)  # Give processes time to release cameras and ports
+    time.sleep(1.5)
+    for name in (*CAMERA_VID_BINARIES, "mediamtx"):
+        try:
+            subprocess.run(
+                ["pkill", "-KILL", name],
+                capture_output=True,
+                timeout=2,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            pass
+    time.sleep(2.5)  # Give kernel time to release cameras and pipeline
 
 
 def _sig_handler(_signum: int, _frame: object) -> None:
@@ -178,7 +188,10 @@ def main() -> None:
         libcam.stdout = None  # allow libcam to get SIGPIPE when ffmpeg exits
         _processes.append((f"{cam_key}/ffmpeg", ffmpeg))
 
+    # Start pipelines staggered so they don't contend for the same libcamera pipeline (Pi 5 / pisp).
     start_camera_pipeline("cam0", 0, cam0)
+    if cam1.get("enabled", True):
+        time.sleep(2)  # Let cam0 acquire camera before cam1 tries
     start_camera_pipeline("cam1", 1, cam1)
 
     logger.info("Streams: %s/cam0 and %s/cam1 (replace 127.0.0.1 with Pi IP for remote access)", rtsp_base, rtsp_base)
