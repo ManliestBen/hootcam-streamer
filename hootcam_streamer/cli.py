@@ -29,6 +29,21 @@ def _camera_vid_binary() -> str | None:
     return None
 
 
+def _kill_leftover_processes() -> None:
+    """Kill any leftover camera/MediaMTX processes from a previous crash so cameras and ports are free."""
+    # pkill sends SIGTERM; process names must match exactly (no path).
+    for name in (*CAMERA_VID_BINARIES, "mediamtx"):
+        try:
+            subprocess.run(
+                ["pkill", "-TERM", name],
+                capture_output=True,
+                timeout=2,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            pass
+    time.sleep(1.5)  # Give processes time to release cameras and ports
+
+
 def _sig_handler(_signum: int, _frame: object) -> None:
     for _label, p in _processes:
         try:
@@ -54,8 +69,13 @@ def main() -> None:
     mediamtx_path = config.get("mediamtx_path", "mediamtx")
     rtsp_port = config.get("rtsp_port", 8554)
     mediamtx_rtp_port = config.get("mediamtx_rtp_port")
+    kill_leftovers = config.get("kill_leftover_processes", True)
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
+
+    if kill_leftovers:
+        logger.info("Cleaning up any leftover camera/MediaMTX processes from previous run...")
+        _kill_leftover_processes()
 
     # Require system binaries (not in venv)
     if not shutil.which(mediamtx_path):

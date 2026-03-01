@@ -76,6 +76,7 @@ Configure [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) (o
 | `mediamtx_path` | `mediamtx` | Path to MediaMTX binary (or `mediamtx` if in PATH). |
 | `rtsp_port` | `8554` | Port MediaMTX listens on (RTSP). |
 | `mediamtx_rtp_port` | *(none)* | If port 8000 (RTP) or 8001 (RTCP) is in use, set an alternate RTP port (e.g. `8010`); RTCP will use this + 1. |
+| `kill_leftover_processes` | `true` | On startup, send SIGTERM to any leftover `rpicam-vid`/`libcamera-vid`/`mediamtx` from a previous crash so cameras and ports are free. Set to `false` if you run multiple instances or other apps using the same binaries. |
 | `cam0` / `cam1` | — | Per-camera options (see below). |
 
 Per-camera (`cam0`, `cam1`):
@@ -91,6 +92,8 @@ Per-camera (`cam0`, `cam1`):
 ## Troubleshooting
 
 - **Port 8000 (or 8001) already in use** — MediaMTX uses UDP 8000 (RTP) and 8001 (RTCP) by default. Set `mediamtx_rtp_port` in `config.yaml` to an unused port (e.g. `8010`). MediaMTX will then use that port and the next for RTP/RTCP.
+
+- **Pipeline/camera in use after a crash** — By default, on startup the app sends SIGTERM to any leftover `rpicam-vid`, `libcamera-vid`, and `mediamtx` processes from a previous run so you can restart without rebooting. To disable this (e.g. if you run multiple instances), set `kill_leftover_processes: false` in `config.yaml`.
 
 ## How it works
 
