@@ -91,11 +91,17 @@ def run_picamera2_pipeline(
             try:
                 self.ffmpeg.stdin.write(frame)
                 self.ffmpeg.stdin.flush()
-            except BrokenPipeError:
+            except (BrokenPipeError, OSError):
                 if self.ffmpeg is not None:
-                    logger.warning("RTSP output pipe closed (ffmpeg or MediaMTX disconnected): %s", self.rtsp_url)
-                self.ffmpeg = None
-            except OSError:
+                    logger.warning(
+                        "RTSP output pipe closed (ffmpeg or MediaMTX disconnected): %s",
+                        self.rtsp_url,
+                    )
+                    # Close stdin before clearing reference so gc doesn't raise again ("Exception ignored")
+                    try:
+                        self.ffmpeg.stdin.close()
+                    except Exception:
+                        pass
                 self.ffmpeg = None
             except Exception:
                 pass
@@ -147,7 +153,8 @@ def run_picamera2_pipeline(
 
     setup_camera("cam0", 0, cam0)
     if cam1.get("enabled", True):
-        time.sleep(2.5)  # Let cam0 pipeline settle before starting cam1 (avoids V4L2 buffer errors on Pi 5)
+        # Longer delay so cam0 is fully streaming before cam1 starts (reduces V4L2 "Failed to queue buffer" on Pi 5)
+        time.sleep(4.0)
     setup_camera("cam1", 1, cam1)
 
     if not any(c[1] is not None for c in cameras):

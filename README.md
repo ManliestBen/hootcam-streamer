@@ -111,6 +111,8 @@ Per-camera (`cam0`, `cam1`):
 
 - **picamera2 requires the libcamera library** — The pip package picamera2 uses the system **libcamera** stack and Python bindings. Install them with: `sudo apt install -y libcap-dev python3-picamera2`. Then create your venv with **system-site-packages** so it can see the system libcamera: `python3 -m venv --system-site-packages .venv`, activate it, and run `pip install -r requirements.txt`.
 
+- **Picamera2: "Failed to queue buffer" / "Input/output error" on second camera (cam1)** — On some Pi 5 setups the second camera hits V4L2 buffer errors even with a staggered start. The app waits 4 seconds between starting cam0 and cam1 to reduce this. If it still happens, try: reboot and run again; use a single camera (`cam1.enabled: false`); or check cables and that both cameras are detected (`libcamera-hello --list-cameras`).
+
 ## How it works
 
 1. **MediaMTX** runs as the RTSP server (port 8554).
