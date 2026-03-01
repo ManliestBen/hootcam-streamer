@@ -1,7 +1,0 @@
-# Pi 5 / pisp: increase camera frontend timeout to avoid "Camera frontend has timed out"
-# when running two cameras or under load. Default is 1000 ms; 100000 ms = 100 s.
-# See: https://github.com/raspberrypi/libcamera/issues/139
-version: 1.0
-target: pisp
-pipeline_handler:
-  camera_timeout_value_ms: 100000

@@ -1,5 +1,5 @@
 [Unit]
-Description=Hootcam Streamer - RTSP streams from Pi CSI cameras
+Description=Hootcam Streamer - MJPEG streams from Pi CSI cameras (Spyglass)
 After=network-online.target
 Wants=network-online.target
 

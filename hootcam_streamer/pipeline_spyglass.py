@@ -29,6 +29,7 @@ def run_spyglass_pipeline(
     cam1: dict[str, Any],
     spyglass_port_cam0: int = 8080,
     spyglass_port_cam1: int = 8081,
+    cam1_stagger_sec: float = 5.0,
 ) -> list[tuple[str, subprocess.Popen]]:
     """Start two Spyglass processes (camera 0 and 1). Returns list of (label, process) for caller to track."""
     _bin = shutil.which("spyglass") or (Path(sys.executable).parent / "spyglass")
@@ -76,8 +77,10 @@ def run_spyglass_pipeline(
         processes.append((f"{cam_key}/spyglass", proc))
 
     start_spyglass("cam0", 0, cam0, spyglass_port_cam0)
-    if cam1.get("enabled", True):
-        time.sleep(2)  # Stagger so cam0 binds before cam1
+    if cam1.get("enabled", True) and cam1_stagger_sec > 0:
+        # Stagger so cam0 fully opens and binds before cam1 (reduces V4L2/libcamera contention on Pi 5)
+        logger.info("Waiting %.1f s before starting cam1...", cam1_stagger_sec)
+        time.sleep(cam1_stagger_sec)
     start_spyglass("cam1", 1, cam1, spyglass_port_cam1)
 
     if not processes:

@@ -1,5 +1,5 @@
-# Optional: only needed if you use config.yaml (YAML support)
+# Required for config.yaml (YAML support)
 PyYAML>=6.0
 
-# Required for backend: picamera2 (dual-camera on Pi 5). Omit if you only use backend: rpicam-vid.
-picamera2
+# Spyglass (MJPEG server) – install separately in the same venv:
+# pip install git+https://github.com/ManliestBen/spyglass.git

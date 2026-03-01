@@ -2,7 +2,7 @@
 
 ## Run on boot (Pi)
 
-1. Complete the main [README](../README.md) setup (MediaMTX, ffmpeg, libcamera-apps, venv + `pip install -r requirements.txt`, optional config.yaml).
+1. Complete the main [README](../README.md) setup (system Picamera2, venv + `pip install -r requirements.txt` and Spyglass, optional config.yaml).
 
 2. Copy the unit file:
    ```bash

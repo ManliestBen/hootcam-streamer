@@ -1,10 +1,8 @@
-"""Main entry: start MediaMTX and two camera-vid | ffmpeg pipelines."""
+"""Main entry: run two Spyglass instances (one per camera) for MJPEG streaming."""
 from __future__ import annotations
 
 import argparse
 import logging
-import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -16,42 +14,6 @@ from .config import load_config
 logger = logging.getLogger(__name__)
 
 _processes: list[tuple[str, subprocess.Popen]] = []
-
-# Newer Pi OS uses rpicam-vid; older uses libcamera-vid. Same CLI for our options.
-CAMERA_VID_BINARIES = ("rpicam-vid", "libcamera-vid")
-
-
-def _camera_vid_binary() -> str | None:
-    """Return the camera capture binary to use (rpicam-vid or libcamera-vid), or None."""
-    for name in CAMERA_VID_BINARIES:
-        if shutil.which(name):
-            return name
-    return None
-
-
-def _kill_leftover_processes() -> None:
-    """Kill any leftover camera/MediaMTX processes from a previous crash so cameras and ports are free."""
-    # pkill: SIGTERM first, then SIGKILL so the pipeline is released even if a process ignored TERM.
-    for name in (*CAMERA_VID_BINARIES, "mediamtx"):
-        try:
-            subprocess.run(
-                ["pkill", "-TERM", name],
-                capture_output=True,
-                timeout=2,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-            pass
-    time.sleep(1.5)
-    for name in (*CAMERA_VID_BINARIES, "mediamtx"):
-        try:
-            subprocess.run(
-                ["pkill", "-KILL", name],
-                capture_output=True,
-                timeout=2,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-            pass
-    time.sleep(2.5)  # Give kernel time to release cameras and pipeline
 
 
 def _sig_handler(_signum: int, _frame: object) -> None:
@@ -65,7 +27,9 @@ def _sig_handler(_signum: int, _frame: object) -> None:
 
 def main() -> None:
     global _processes
-    parser = argparse.ArgumentParser(description="Hootcam Streamer: RTSP from Pi CSI cameras")
+    parser = argparse.ArgumentParser(
+        description="Hootcam Streamer: two Spyglass MJPEG streams from Pi CSI cameras"
+    )
     parser.add_argument("--config", "-c", type=Path, default=Path("config.yaml"), help="Config YAML path")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
     args = parser.parse_args()
@@ -76,176 +40,40 @@ def main() -> None:
     )
 
     config = load_config(args.config)
-    mediamtx_path = config.get("mediamtx_path", "mediamtx")
-    rtsp_port = config.get("rtsp_port", 8554)
-    mediamtx_rtp_port = config.get("mediamtx_rtp_port")
-    kill_leftovers = config.get("kill_leftover_processes", True)
-    backend = config.get("backend", "rpicam-vid").strip().lower()
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
-
-    if backend not in ("rpicam-vid", "picamera2", "spyglass"):
-        logger.error("Invalid backend %r; use 'rpicam-vid', 'picamera2', or 'spyglass'", backend)
-        sys.exit(1)
-    logger.info("Backend: %s", backend)
-
-    if kill_leftovers and backend != "spyglass":
-        logger.info("Cleaning up any leftover camera/MediaMTX processes from previous run...")
-        _kill_leftover_processes()
-
-    if backend != "spyglass":
-        # MediaMTX + ffmpeg required for RTSP backends
-        if not shutil.which(mediamtx_path):
-            logger.error("MediaMTX binary not found: %s. Install from https://github.com/bluenviron/mediamtx/releases", mediamtx_path)
-            sys.exit(1)
-        if not shutil.which("ffmpeg"):
-            logger.error("ffmpeg not found. Install with: sudo apt install -y ffmpeg")
-            sys.exit(1)
-    if backend == "rpicam-vid":
-        camera_vid = _camera_vid_binary()
-        if not camera_vid:
-            logger.error(
-                "No camera capture binary found (tried: %s). Install with: sudo apt install -y libcamera-apps (or rpicam-apps on newer Pi OS)",
-                ", ".join(CAMERA_VID_BINARIES),
-            )
-            sys.exit(1)
-        logger.info("Using camera binary: %s", camera_vid)
+    spyglass_port_cam0 = int(config.get("spyglass_port_cam0", 8080))
+    spyglass_port_cam1 = int(config.get("spyglass_port_cam1", 8081))
+    cam1_stagger_sec = float(config.get("spyglass_cam1_stagger_sec", 5.0))
 
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
 
-    if backend != "spyglass":
-        # Start MediaMTX for RTSP backends
-        mtx_cmd = [mediamtx_path]
-        if str(rtsp_port) != "8554":
-            mtx_cmd.extend(["--rtspPort", str(rtsp_port)])
-        mtx_env = os.environ.copy()
-        if mediamtx_rtp_port is not None:
-            rtp_port = int(mediamtx_rtp_port)
-            mtx_env["MTX_RTPADDRESS"] = f":{rtp_port}"
-            mtx_env["MTX_RTCPADDRESS"] = f":{rtp_port + 1}"
-            logger.info("MediaMTX RTP/RTCP ports: %s / %s", rtp_port, rtp_port + 1)
-        logger.info("Starting MediaMTX: %s", " ".join(mtx_cmd))
-        mtx = subprocess.Popen(
-            mtx_cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            env=mtx_env,
-        )
-        _processes.append(("MediaMTX", mtx))
-        time.sleep(1)
-        if mtx.poll() is not None:
-            _, err = mtx.communicate()
-            msg = err.decode(errors="replace").strip() if err else ""
-            parts = [f"exit code {mtx.returncode}"]
-            if msg:
-                parts.append(msg)
-            logger.error("MediaMTX exited: %s", " — ".join(parts) or "unknown")
-            logger.error("Run '%s' in a terminal to see MediaMTX output and fix the issue.", " ".join(mtx_cmd))
-            sys.exit(1)
-        rtsp_base = f"rtsp://127.0.0.1:{rtsp_port}"
-        logger.info("Streams: %s/cam0 and %s/cam1 (replace 127.0.0.1 with Pi IP for remote access)", rtsp_base, rtsp_base)
-
     try:
-        if backend == "spyglass":
-            from .pipeline_spyglass import run_spyglass_pipeline
-            spyglass_port_cam0 = int(config.get("spyglass_port_cam0", 8080))
-            spyglass_port_cam1 = int(config.get("spyglass_port_cam1", 8081))
-            try:
-                procs = run_spyglass_pipeline(cam0, cam1, spyglass_port_cam0, spyglass_port_cam1)
-            except RuntimeError as e:
-                logger.error("%s", e)
-                sys.exit(1)
-            _processes.extend(procs)
-            if not _processes:
-                logger.warning("No Spyglass instances started (all cameras disabled)")
-            while _processes:
-                for label, p in _processes:
-                    if p.poll() is not None:
-                        err_msg = ""
-                        if p.stderr is not None:
-                            try:
-                                err_msg = p.stderr.read().decode(errors="replace").strip()
-                            except Exception:
-                                pass
-                        logger.warning("Process %s exited with %s", label, p.returncode)
-                        if err_msg:
-                            for line in err_msg.splitlines():
-                                logger.warning("  %s", line)
-                        raise SystemExit(1)
-                time.sleep(2)
-        elif backend == "picamera2":
-            from .pipeline_picamera2 import run_picamera2_pipeline
-            run_picamera2_pipeline(rtsp_base, cam0, cam1)
-        else:
-            # rpicam-vid
-            def start_camera_pipeline(cam_key: str, camera_index: int, cam_cfg: dict) -> None:
-                if not cam_cfg.get("enabled", True):
-                    logger.info("Skipping %s (disabled)", cam_key)
-                    return
-                w = cam_cfg.get("width", 1920)
-                h = cam_cfg.get("height", 1080)
-                fps = cam_cfg.get("fps", 25)
-                # rpicam-vid / libcamera-vid: -t 0 = run forever, -n = no preview, -c = camera index, -o - = stdout.
-                # --libav-format required when writing to stdout (Pi 5 / newer libav backend).
-                libcam_cmd = [
-                    camera_vid,
-                    "-t", "0",
-                    "-n",
-                    "-c", str(camera_index),
-                    "--width", str(w),
-                    "--height", str(h),
-                    "--framerate", str(fps),
-                    "--codec", "h264",
-                    "--libav-format", "h264",
-                    "-o", "-",
-                ]
-                path_name = "cam0" if camera_index == 0 else "cam1"
-                ffmpeg_cmd = [
-                    "ffmpeg",
-                    "-hide_banner", "-loglevel", "warning",
-                    "-f", "h264",
-                    "-i", "pipe:0",
-                    "-c:v", "copy",
-                    "-f", "rtsp",
-                    f"{rtsp_base}/{path_name}",
-                ]
-                logger.info("Starting pipeline %s: %s | ffmpeg -> %s/%s", cam_key, camera_vid, rtsp_base, path_name)
-                libcam = subprocess.Popen(
-                    libcam_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                _processes.append((f"{cam_key}/{camera_vid}", libcam))
-                ffmpeg = subprocess.Popen(
-                    ffmpeg_cmd,
-                    stdin=libcam.stdout,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                )
-                libcam.stdout = None
-                _processes.append((f"{cam_key}/ffmpeg", ffmpeg))
-
-            start_camera_pipeline("cam0", 0, cam0)
-            if cam1.get("enabled", True):
-                time.sleep(2)
-            start_camera_pipeline("cam1", 1, cam1)
-
-            while True:
-                for label, p in _processes:
-                    if p.poll() is not None:
-                        err_msg = ""
-                        if p.stderr is not None:
-                            try:
-                                err_msg = p.stderr.read().decode(errors="replace").strip()
-                            except Exception:
-                                pass
-                        logger.warning("Process %s exited with %s", label, p.returncode)
-                        if err_msg:
-                            for line in err_msg.splitlines():
-                                logger.warning("  %s", line)
-                        raise SystemExit(1)
-                time.sleep(2)
+        from .pipeline_spyglass import run_spyglass_pipeline
+        try:
+            procs = run_spyglass_pipeline(cam0, cam1, spyglass_port_cam0, spyglass_port_cam1, cam1_stagger_sec)
+        except RuntimeError as e:
+            logger.error("%s", e)
+            sys.exit(1)
+        _processes.extend(procs)
+        if not _processes:
+            logger.warning("No Spyglass instances started (all cameras disabled)")
+        while _processes:
+            for label, p in _processes:
+                if p.poll() is not None:
+                    err_msg = ""
+                    if p.stderr is not None:
+                        try:
+                            err_msg = p.stderr.read().decode(errors="replace").strip()
+                        except Exception:
+                            pass
+                    logger.warning("Process %s exited with %s", label, p.returncode)
+                    if err_msg:
+                        for line in err_msg.splitlines():
+                            logger.warning("  %s", line)
+                    raise SystemExit(1)
+            time.sleep(2)
     except (SystemExit, KeyboardInterrupt):
         pass
     finally:
