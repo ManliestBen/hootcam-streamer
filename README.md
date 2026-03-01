@@ -14,7 +14,7 @@ Part of the **3-part Hootcam** setup:
 - Two CSI cameras (or one; second stream will not start)
 - **MediaMTX** (RTSP server): [releases](https://github.com/bluenviron/mediamtx/releases)
 - **FFmpeg** (with libcamera or H.264 input)
-- **Camera capture**: Either **rpicam-vid** (default) or **Picamera2** (for dual-camera on Pi 5). For the default backend: `sudo apt install -y libcamera-apps` or `rpicam-apps` on Bookworm+. Picamera2 is included in `requirements.txt`; install Python deps (step 3 below) to use `backend: picamera2`.
+- **Camera capture**: Either **rpicam-vid** (default) or **Picamera2** (for dual-camera on Pi 5). For the default backend: `sudo apt install -y libcamera-apps` or `rpicam-apps` on Bookworm+. For Picamera2: the pip package needs the **libcamera** system library and Python bindings—install them via apt (step 2), then use a venv that can see them (step 3).
 
 ## Quick start
 
@@ -32,18 +32,23 @@ Part of the **3-part Hootcam** setup:
    # Then in config.yaml: mediamtx_path: /home/pi/bin/mediamtx  (adjust user/path as needed)
    ```
 
-2. Install system deps (if not already):
+2. Install system deps (if not already). For `backend: picamera2` (dual-camera on Pi 5), picamera2 needs the **libcamera** library and Python bindings from the system; install them plus build deps:
 
    ```bash
    sudo apt install -y ffmpeg libcamera-apps
    # On Raspberry Pi OS Bookworm and later you may need: sudo apt install -y rpicam-apps
+   # Required for backend: picamera2 (libcamera + Python bindings; libcap-dev for building pip deps):
+   sudo apt install -y libcap-dev python3-picamera2
    ```
+   `libcamera-apps` provides the libcamera runtime and rpicam-vid; `python3-picamera2` provides the libcamera Python bindings that the pip picamera2 package uses.
 
-3. **Create a virtualenv and install Python deps** (recommended; keeps deps isolated). This installs PyYAML (for config) and picamera2 (for dual-camera on Pi 5 when using `backend: picamera2`):
+3. **Create a virtualenv and install Python deps** (recommended). This installs PyYAML (for config) and picamera2. If you use `backend: picamera2`, create the venv with **system-site-packages** so it can use the system libcamera (from step 2):
 
    ```bash
    cd hootcam-streamer
+   # Use --system-site-packages if you use backend: picamera2 (so the venv sees system libcamera/picamera2)
    python3 -m venv .venv
+   # Or for picamera2:  python3 -m venv --system-site-packages .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
@@ -71,7 +76,7 @@ Configure [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) (o
 
 ### Dual-camera on Raspberry Pi 5
 
-On Pi 5, the default backend can only use one camera (the second fails with "Pipeline handler in use"). To use **both** cameras: install Python deps from `requirements.txt` (step 3 above; includes picamera2), set `backend: picamera2` in `config.yaml`, then run `python -m hootcam_streamer`. See [docs/DUAL_CAMERA_DESIGN.md](docs/DUAL_CAMERA_DESIGN.md).
+On Pi 5, the default backend can only use one camera (the second fails with "Pipeline handler in use"). To use **both** cameras: (1) install system deps including `python3-picamera2` (step 2), (2) create the venv with `--system-site-packages` and run `pip install -r requirements.txt` (step 3), (3) set `backend: picamera2` in `config.yaml`, then run `python -m hootcam_streamer`. See [docs/DUAL_CAMERA_DESIGN.md](docs/DUAL_CAMERA_DESIGN.md).
 
 ## Config (config.yaml)
 
@@ -100,7 +105,11 @@ Per-camera (`cam0`, `cam1`):
 
 - **Pipeline/camera in use after a crash** — By default, on startup the app sends SIGTERM then SIGKILL to any leftover `rpicam-vid`, `libcamera-vid`, and `mediamtx` processes, then waits before starting so cameras are free. The two camera pipelines are also started with a short stagger so they don’t contend for the libcamera pipeline (Pi 5). To disable cleanup (e.g. if you run multiple instances), set `kill_leftover_processes: false` in `config.yaml`.
 
-- **Pi 5: second camera fails with "Pipeline handler in use" or "Device or resource busy"** — With the default `rpicam-vid` backend, only one process can use the pipeline on Pi 5. **Fix:** use the **Picamera2** backend so both cameras run in one process: set `backend: picamera2` in `config.yaml` and run `pip install picamera2`. See [docs/DUAL_CAMERA_DESIGN.md](docs/DUAL_CAMERA_DESIGN.md). Alternatively, use a single camera: set `cam1.enabled: false`.
+- **Pi 5: second camera fails with "Pipeline handler in use" or "Device or resource busy"** — With the default `rpicam-vid` backend, only one process can use the pipeline on Pi 5. **Fix:** use the **Picamera2** backend so both cameras run in one process: install `libcap-dev` (see step 2), set `backend: picamera2` in `config.yaml`, then `pip install -r requirements.txt`. See [docs/DUAL_CAMERA_DESIGN.md](docs/DUAL_CAMERA_DESIGN.md). Alternatively, use a single camera: set `cam1.enabled: false`.
+
+- **"You need to install libcap development headers to build this module"** — The picamera2 dependency (python-prctl) needs the libcap dev package. Install it before `pip install -r requirements.txt`: `sudo apt install -y libcap-dev`.
+
+- **picamera2 requires the libcamera library** — The pip package picamera2 uses the system **libcamera** stack and Python bindings. Install them with: `sudo apt install -y libcap-dev python3-picamera2`. Then create your venv with **system-site-packages** so it can see the system libcamera: `python3 -m venv --system-site-packages .venv`, activate it, and run `pip install -r requirements.txt`.
 
 ## How it works
 
