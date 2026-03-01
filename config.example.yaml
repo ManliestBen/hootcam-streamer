@@ -3,6 +3,8 @@
 
 spyglass_port_cam0: 8082
 spyglass_port_cam1: 8083
+# Port for the streamer API (GET/PATCH /config). Hootcam Motion can push resolution/fps from the UI when you set streamer_api_url in Motion's global config.
+# streamer_api_port: 8084
 # Seconds to wait after starting cam0 before starting cam1 (reduces contention on Pi 5). Increase if cam1 fails.
 # spyglass_cam1_stagger_sec: 5.0
 

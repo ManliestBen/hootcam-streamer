@@ -61,6 +61,20 @@ With the streamer running, open in a browser or use curl:
 
 Or from the Pi: `curl http://127.0.0.1:8082/snapshot -o snap.jpg`
 
+## Streamer API (config trickle-down)
+
+The streamer runs a small HTTP API (default port **8084**) so that when you change camera settings in the **Hootcam Motion** UI, those values can be pushed to the Pi and the streams can reload with the new resolution/fps.
+
+- **GET** `http://<pi-ip>:8084/config` – Returns current streamer config (cam0/cam1, ports, etc.) as JSON.
+- **PATCH** `http://<pi-ip>:8084/config` – Accepts JSON with `cam0` and/or `cam1` keys (e.g. `width`, `height`, `fps`, `enabled`). Updates `config.yaml` and restarts the Spyglass processes with the new settings.
+
+To enable trickle-down from the UI:
+
+1. In **Hootcam Motion** global config (UI **Config** page), set **Streamer API URL** to `http://<pi-ip>:8084` (replace with your Pi’s IP).
+2. When you save **Cameras → Camera 0 or 1 → Config** (e.g. resolution or framerate), Motion will PATCH the streamer; the streamer will reload and apply the new values.
+
+Configure the API port in `config.yaml` with `streamer_api_port` (default 8084).
+
 ## Configuring Hootcam Motion and Hootcam UI
 
 ### Hootcam Motion (NUC)
@@ -73,7 +87,9 @@ Hootcam Motion reads each camera’s **stream_url** and supports both RTSP and *
 
    Replace `<pi-ip>` with your Pi’s IP (e.g. `192.168.1.10`).
 
-2. Or via API:  
+2. (Optional) In **Config** (global), set **Streamer API URL** to `http://<pi-ip>:8084` so that saving camera resolution/fps in the UI pushes those values to the Pi (see “Streamer API” above).
+
+3. Or via API:  
    `PATCH /cameras/0/config` with `{ "stream_url": "http://192.168.1.10:8082/stream" }`  
    `PATCH /cameras/1/config` with `{ "stream_url": "http://192.168.1.10:8083/stream" }`
 
@@ -94,6 +110,7 @@ Use your NUC’s IP and the port Hootcam Motion runs on (default 8080). The UI t
 | Key | Default | Description |
 |-----|---------|-------------|
 | `spyglass_port_cam0` / `spyglass_port_cam1` | `8082` / `8083` | Ports for the two Spyglass instances. Streams at `http://<pi-ip>:8082/stream` and `http://<pi-ip>:8083/stream`. |
+| `streamer_api_port` | `8084` | Port for the streamer API (GET/PATCH `/config`). Used by Hootcam Motion to push resolution/fps when **Streamer API URL** is set. |
 | `spyglass_cam1_stagger_sec` | `5.0` | Seconds to wait after starting cam0 before starting cam1. Reduces V4L2/libcamera contention on Pi 5; increase (e.g. 7–8) if the second stream fails. |
 | `cam0` / `cam1` | — | Per-camera options (see below). |
 
