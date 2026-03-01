@@ -24,7 +24,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     except Exception:
         return dict(_DEFAULTS)
     out = dict(_DEFAULTS)
-    for key in ("mediamtx_path", "rtsp_port"):
+    for key in ("mediamtx_path", "rtsp_port", "mediamtx_rtp_port"):
         if key in data:
             out[key] = data[key]
     for cam in ("cam0", "cam1"):

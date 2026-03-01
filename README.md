@@ -18,10 +18,18 @@ Part of the **3-part Hootcam** setup:
 
 ## Quick start
 
-1. Install MediaMTX (example for arm64):
+1. Install MediaMTX (example for arm64). Writing to `/usr/local/bin` requires `sudo`:
 
    ```bash
-   wget -qO- https://github.com/bluenviron/mediamtx/releases/download/v1.11.0/mediamtx_v1.11.0_linux_arm64v8.tar.gz | tar xz -C /usr/local/bin
+   wget -qO- https://github.com/bluenviron/mediamtx/releases/download/v1.11.0/mediamtx_v1.11.0_linux_arm64v8.tar.gz | sudo tar xz -C /usr/local/bin
+   ```
+
+   If you prefer not to use sudo, extract to a writable directory (e.g. `~/bin` or the project) and set `mediamtx_path` in `config.yaml` to the full path to the `mediamtx` binary:
+
+   ```bash
+   mkdir -p ~/bin
+   wget -qO- https://github.com/bluenviron/mediamtx/releases/download/v1.11.0/mediamtx_v1.11.0_linux_arm64v8.tar.gz | tar xz -C ~/bin
+   # Then in config.yaml: mediamtx_path: /home/pi/bin/mediamtx  (adjust user/path as needed)
    ```
 
 2. Install system deps (if not already):
@@ -65,7 +73,8 @@ Configure [**Hootcam Motion**](https://github.com/ManliestBen/hootcam-motion) (o
 | Key | Default | Description |
 |-----|---------|-------------|
 | `mediamtx_path` | `mediamtx` | Path to MediaMTX binary (or `mediamtx` if in PATH). |
-| `rtsp_port` | `8554` | Port MediaMTX listens on. |
+| `rtsp_port` | `8554` | Port MediaMTX listens on (RTSP). |
+| `mediamtx_rtp_port` | *(none)* | If port 8000 (RTP) or 8001 (RTCP) is in use, set an alternate RTP port (e.g. `8010`); RTCP will use this + 1. |
 | `cam0` / `cam1` | — | Per-camera options (see below). |
 
 Per-camera (`cam0`, `cam1`):
@@ -77,6 +86,10 @@ Per-camera (`cam0`, `cam1`):
 | `fps` | `25` | Framerate. |
 | `bitrate` | `4000000` | H.264 bitrate (bits/sec). |
 | `enabled` | `true` | Set `false` to disable a camera. |
+
+## Troubleshooting
+
+- **Port 8000 (or 8001) already in use** — MediaMTX uses UDP 8000 (RTP) and 8001 (RTCP) by default. Set `mediamtx_rtp_port` in `config.yaml` to an unused port (e.g. `8010`). MediaMTX will then use that port and the next for RTP/RTCP.
 
 ## How it works
 

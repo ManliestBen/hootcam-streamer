@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .config import load_config
@@ -39,6 +41,7 @@ def main() -> None:
     config = load_config(args.config)
     mediamtx_path = config.get("mediamtx_path", "mediamtx")
     rtsp_port = config.get("rtsp_port", 8554)
+    mediamtx_rtp_port = config.get("mediamtx_rtp_port")
     cam0 = config.get("cam0", {})
     cam1 = config.get("cam1", {})
 
@@ -49,20 +52,31 @@ def main() -> None:
     mtx_cmd = [mediamtx_path]
     if str(rtsp_port) != "8554":
         mtx_cmd.extend(["--rtspPort", str(rtsp_port)])
+    mtx_env = os.environ.copy()
+    if mediamtx_rtp_port is not None:
+        rtp_port = int(mediamtx_rtp_port)
+        mtx_env["MTX_RTPADDRESS"] = f":{rtp_port}"
+        mtx_env["MTX_RTCPADDRESS"] = f":{rtp_port + 1}"
+        logger.info("MediaMTX RTP/RTCP ports: %s / %s", rtp_port, rtp_port + 1)
     logger.info("Starting MediaMTX: %s", " ".join(mtx_cmd))
     mtx = subprocess.Popen(
         mtx_cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
+        env=mtx_env,
     )
     _processes.append(mtx)
 
     # Give MediaMTX a moment to bind
-    import time
     time.sleep(1)
     if mtx.poll() is not None:
         _, err = mtx.communicate()
-        logger.error("MediaMTX exited: %s", err.decode() if err else "unknown")
+        msg = err.decode(errors="replace").strip() if err else ""
+        parts = [f"exit code {mtx.returncode}"]
+        if msg:
+            parts.append(msg)
+        logger.error("MediaMTX exited: %s", " — ".join(parts) or "unknown")
+        logger.error("Run '%s' in a terminal to see MediaMTX output and fix the issue.", " ".join(mtx_cmd))
         sys.exit(1)
 
     rtsp_base = f"rtsp://127.0.0.1:{rtsp_port}"
