@@ -92,6 +92,10 @@ def run_picamera2_pipeline(
                 self.ffmpeg.stdin.write(frame)
                 self.ffmpeg.stdin.flush()
             except BrokenPipeError:
+                if self.ffmpeg is not None:
+                    logger.warning("RTSP output pipe closed (ffmpeg or MediaMTX disconnected): %s", self.rtsp_url)
+                self.ffmpeg = None
+            except OSError:
                 self.ffmpeg = None
             except Exception:
                 pass
@@ -142,6 +146,8 @@ def run_picamera2_pipeline(
         cameras.append((cam_key, picam2, encoder))
 
     setup_camera("cam0", 0, cam0)
+    if cam1.get("enabled", True):
+        time.sleep(2.5)  # Let cam0 pipeline settle before starting cam1 (avoids V4L2 buffer errors on Pi 5)
     setup_camera("cam1", 1, cam1)
 
     if not any(c[1] is not None for c in cameras):
